@@ -20,7 +20,7 @@
 ## Preview
 
 <p align="center">
-  <img src="assets/screenshots/01-desktop.png" alt="Desktop preview" width="100%"/>
+  <img src="assets/screenshots/preview-desktop.png" alt="Desktop preview" width="100%"/>
 </p>
 
 | Layer | What you get |
