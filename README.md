@@ -51,7 +51,7 @@ Optional: [hyprglass](https://github.com/) via `hyprpm` (config already guards w
 
 ```bash
 cd ~
-git clone https://github.com/<YOUR_USER>/Quickshell-shell.git
+git clone https://github.com/FerrSa17/Quickshell-shell.git
 cd Quickshell-shell
 ```
 
@@ -60,7 +60,7 @@ cd Quickshell-shell
 After you publish the wallpaper Release asset, set the URL (once):
 
 ```bash
-export WALLPAPERS_URL="https://github.com/<YOUR_USER>/Quickshell-shell/releases/latest/download/wallpapers.tar.zst"
+export WALLPAPERS_URL="https://github.com/FerrSa17/Quickshell-shell/releases/latest/download/wallpapers.tar.zst"
 ```
 
 Then:
@@ -129,7 +129,7 @@ wallpapers.tar.zst
 Then point installers at:
 
 ```text
-https://github.com/<YOUR_USER>/Quickshell-shell/releases/latest/download/wallpapers.tar.zst
+https://github.com/FerrSa17/Quickshell-shell/releases/latest/download/wallpapers.tar.zst
 ```
 
 For local testing without GitHub:
