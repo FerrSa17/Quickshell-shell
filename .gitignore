@@ -1,0 +1,9 @@
+# Generated / local
+dist/
+*.tar
+*.tar.zst
+configs/quickshell/colors.json
+configs/yazi/__pycache__/
+**/__pycache__/
+*.pyc
+.DS_Store

@@ -1,0 +1,11 @@
+{
+  "os_bg": "#dac4b4",
+  "os_fg": "#141717",
+  "dir_bg": "#cf8c59",
+  "dir_fg": "#141717",
+  "git_bg": "#574638",
+  "lang_bg": "#342e27",
+  "time_bg": "#24211e",
+  "accent": "#d1986b",
+  "time_fg": "#c9b5a6"
+}
