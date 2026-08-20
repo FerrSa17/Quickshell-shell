@@ -20,6 +20,7 @@ Item {
   }
 
   function requestLock() {
+    PanelBus.closeAllPopups()
     root.password = ""
     root.statusMessage = ""
     root.shakeX = 0
@@ -34,7 +35,7 @@ Item {
       return
     }
     if (!pam.start()) {
-      root.statusMessage = "не удалось начать вход"
+      root.statusMessage = "failed to start login"
       return
     }
     if (pam.responseRequired)
@@ -42,7 +43,7 @@ Item {
   }
 
   function authFailed() {
-    root.statusMessage = "неверный пароль"
+    root.statusMessage = "wrong password"
     root.password = ""
     shakePass.restart()
   }
@@ -102,7 +103,7 @@ Item {
     }
 
     onError: _ => {
-      root.statusMessage = "ошибка входа"
+      root.statusMessage = "login error"
       root.password = ""
     }
   }
@@ -152,15 +153,62 @@ Item {
           gradient: Gradient {
             GradientStop {
               position: 0.0
-              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.35)
+              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.28)
             }
             GradientStop {
-              position: 0.45
-              color: "transparent"
+              position: 0.24
+              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.18)
+            }
+            GradientStop {
+              position: 0.50
+              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.10)
+            }
+            GradientStop {
+              position: 0.76
+              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.24)
             }
             GradientStop {
               position: 1.0
-              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.55)
+              color: Qt.rgba(Theme.windowBg.r, Theme.windowBg.g, Theme.windowBg.b, 0.42)
+            }
+          }
+        }
+
+        Rectangle {
+          anchors.fill: parent
+          color: Qt.rgba(Theme.bg.r, Theme.bg.g, Theme.bg.b, 0.20)
+        }
+
+        Item {
+          anchors.right: parent.right
+          anchors.rightMargin: Math.max(Theme.frameThickness + 8, Math.round(parent.width * 0.02))
+          anchors.verticalCenter: parent.verticalCenter
+          width: 220
+          height: 120
+          opacity: 0.9
+          z: 40
+
+          Column {
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: 6
+
+            Text {
+              anchors.horizontalCenter: parent.horizontalCenter
+              text: "\u2192"
+              color: Theme.text
+              font.family: Theme.fontFamily
+              font.pixelSize: 40
+            }
+
+            Text {
+              width: 190
+              horizontalAlignment: Text.AlignHCenter
+              text: "Hover here for power menu"
+              color: Theme.subtext
+              font.family: Theme.fontFamily
+              font.pixelSize: 13
+              wrapMode: Text.WordWrap
             }
           }
         }
@@ -193,9 +241,9 @@ Item {
               anchors.horizontalCenter: parent.horizontalCenter
               text: {
                 const d = clock.date
-                const days = ["воскресенье", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота"]
-                const months = ["января", "февраля", "марта", "апреля", "мая", "июня",
-                                "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+                const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
+                const months = ["January", "February", "March", "April", "May", "June",
+                                "July", "August", "September", "October", "November", "December"]
                 return days[d.getDay()] + ", " + d.getDate() + " " + months[d.getMonth()]
               }
               color: Theme.muted
@@ -283,7 +331,7 @@ Item {
 
                 Text {
                   anchors.fill: parent
-                  text: "пароль"
+                  text: "password"
                   color: Theme.muted
                   font: parent.font
                   horizontalAlignment: Text.AlignHCenter
@@ -330,7 +378,6 @@ Item {
         PowerMenuSession {
           id: powerMenu
           anchors.fill: parent
-          showLockTile: true
           z: 50
 
           onOpenChanged: {

@@ -34,3 +34,9 @@ hl.layer_rule({
 	no_anim = true,
 })
 
+hl.window_rule({
+	name = "cursor-keep-wm-binds",
+	match = { class = "^(cursor|Cursor)$" },
+	no_shortcuts_inhibit = true,
+})
+

@@ -11,6 +11,8 @@ Singleton {
 
   property string appClass: ""
   property string winTitle: ""
+  // True when the focused window (or any on the focused monitor) is fullscreen.
+  property bool fullscreenActive: false
   // wsId -> [{ cls, title, icon }, ...]
   property var clientsByWs: ({})
   property int clientsRev: 0
@@ -59,6 +61,22 @@ Singleton {
     if (c.indexOf("steam") >= 0)
       return "Steam"
 
+    const lo = root.libreKind(c, t)
+    if (lo === "writer")
+      return "Writer"
+    if (lo === "calc")
+      return "Calc"
+    if (lo === "impress")
+      return "Impress"
+    if (lo === "draw")
+      return "Draw"
+    if (lo === "math")
+      return "Math"
+    if (lo === "base")
+      return "Base"
+    if (lo === "office")
+      return "LibreOffice"
+
     const raw = (appClass || "").trim()
     if (!raw.length)
       return ""
@@ -97,7 +115,44 @@ Singleton {
     if (c === "obsidian" || hay.indexOf("obsidian") >= 0)
       return String.fromCodePoint(0xf219)
 
+    const lo = root.libreKind(c, t)
+    if (lo === "math")
+      return String.fromCodePoint(0xf37b)
+    if (lo === "draw")
+      return String.fromCodePoint(0xf379)
+    if (lo === "calc")
+      return String.fromCodePoint(0xf378)
+    if (lo === "base")
+      return String.fromCodePoint(0xf377)
+    if (lo === "writer")
+      return String.fromCodePoint(0xf37c)
+    if (lo === "impress")
+      return String.fromCodePoint(0xf37a)
+    if (lo === "office")
+      return String.fromCodePoint(0xf37c)
+
     return String.fromCodePoint(0xf2d0)
+  }
+
+  function libreKind(appClass, winTitle) {
+    const c = (appClass || "").toLowerCase()
+    const t = (winTitle || "").toLowerCase()
+    const hay = c + " " + t
+    if (c.indexOf("libreoffice") < 0 && c.indexOf("soffice") < 0 && hay.indexOf("libreoffice") < 0)
+      return ""
+    if (c.indexOf("math") >= 0 || t.indexOf("math") >= 0)
+      return "math"
+    if (c.indexOf("draw") >= 0 || t.indexOf("draw") >= 0)
+      return "draw"
+    if (c.indexOf("calc") >= 0 || t.indexOf("calc") >= 0)
+      return "calc"
+    if (c.indexOf("base") >= 0 || t.indexOf("base") >= 0)
+      return "base"
+    if (c.indexOf("impress") >= 0 || t.indexOf("impress") >= 0)
+      return "impress"
+    if (c.indexOf("writer") >= 0 || t.indexOf("writer") >= 0 || c.indexOf("write") >= 0)
+      return "writer"
+    return "office"
   }
 
   function clientsOn(wsId) {
@@ -118,7 +173,7 @@ Singleton {
       if (n === "activewindow" || n === "activewindowv2" || n === "windowtitle"
           || n === "openwindow" || n === "closewindow" || n === "focusedmon"
           || n === "workspace" || n === "workspacev2" || n === "movewindow"
-          || n === "movewindowv2")
+          || n === "movewindowv2" || n === "fullscreen" || n === "fullscreenv2")
         root.refresh()
     }
     function onActiveToplevelChanged() {
@@ -171,10 +226,17 @@ Singleton {
             return
           const clients = JSON.parse(raw)
           const by = ({})
+          let anyFs = false
           for (let i = 0; i < clients.length; i++) {
             const c = clients[i]
             if (!c || c.mapped === false || c.hidden === true)
               continue
+            const fs = c.fullscreen
+            const fsc = c.fullscreenClient
+            if ((typeof fs === "number" ? fs > 0 : !!fs)
+                || (typeof fsc === "number" ? fsc > 0 : !!fsc)
+                || c.overFullscreen === true)
+              anyFs = true
             const ws = c.workspace
             const wid = ws && ws.id !== undefined ? ws.id : null
             if (wid === null || wid < 1)
@@ -194,6 +256,7 @@ Singleton {
           }
           root.clientsByWs = by
           root.clientsRev++
+          root.fullscreenActive = anyFs
         } catch (e) {
           // keep previous
         }

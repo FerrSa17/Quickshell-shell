@@ -28,3 +28,6 @@ hl.env("QT_WAYLAND_DISABLE_WINDOWDECORATION", "1")
 hl.env("QT_QPA_PLATFORMTHEME", "gtk3")
 -- Quiet known Qt portal host-registry race (QTBUG-145847)
 hl.env("QT_LOGGING_RULES", "qt.qpa.services.warning=false")
+-- Hard-disable libcanberra event sounds (GTK "Windows ding").
+hl.env("CANBERRA_DISABLE", "1")
+hl.env("CANBERRA_DRIVER", "null")

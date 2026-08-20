@@ -43,9 +43,9 @@ Scope {
       readonly property int tileSize: 72
       readonly property int edgeHit: Theme.frameThickness
       readonly property int hitBandH: 96
-      // Keyboard selection: 0 lock, 1 poweroff, 2 logout, 3 reboot
+      // Keyboard selection: 0 lock, 1 poweroff, 2 reboot
       property int selectedIndex: 0
-      readonly property var actionKeys: ["lock", "poweroff", "logout", "reboot"]
+      readonly property var actionKeys: ["lock", "poweroff", "reboot"]
 
       readonly property string userName: {
         const u = Quickshell.env("USER") || "user"
@@ -59,6 +59,11 @@ Scope {
         monitorScope.panelHovered = false
         monitorScope.open = false
         monitorScope.selectedIndex = 0
+      }
+
+      ExclusivePopup {
+        popupId: "power"
+        host: monitorScope
       }
 
       function moveSelection(delta) {
@@ -467,21 +472,11 @@ Scope {
                 PowerTile {
                   tileIndex: 2
                   selected: monitorScope.selectedIndex === 2
-                  avatar: true
-                  onActivated: {
-                    monitorScope.selectedIndex = 2
-                    monitorScope.run("logout")
-                  }
-                }
-
-                PowerTile {
-                  tileIndex: 3
-                  selected: monitorScope.selectedIndex === 3
                   glyph: "\uf2f9"
                   glyphColor: monitorScope.pendingAction === "reboot" ? Theme.windowBg : Theme.peach
                   confirm: monitorScope.pendingAction === "reboot"
                   onActivated: {
-                    monitorScope.selectedIndex = 3
+                    monitorScope.selectedIndex = 2
                     monitorScope.requestDanger("reboot")
                   }
                 }

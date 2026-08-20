@@ -9,6 +9,11 @@ Item {
 
   property bool open: false
 
+  ExclusivePopup {
+    popupId: "sysmon"
+    host: root
+  }
+
   function toggle() {
     root.open = !root.open
   }

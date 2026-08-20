@@ -206,7 +206,7 @@ Item {
             bottomLeftRadius: 16
             bottomRightRadius: 16
             antialiasing: true
-            implicitWidth: 300
+            implicitWidth: 340
             implicitHeight: col.implicitHeight + 28
 
             HoverHandler {
@@ -239,7 +239,7 @@ Item {
                 font.weight: Theme.barFontWeight
               }
 
-              SettingsSlider {
+              OsdBar {
                 width: parent.width
                 icon: "\uf185"
                 iconColor: Theme.subtext
@@ -247,12 +247,11 @@ Item {
                 onMoved: v => Brightness.setNormalized(v)
               }
 
-              SettingsSlider {
+              OsdBar {
                 width: parent.width
                 icon: Audio.muted ? "\uf026" : "\uf028"
                 iconColor: Audio.muted ? Theme.red : Theme.subtext
                 value: Math.min(1, Audio.volume / 100)
-                to: 1
                 onMoved: v => {
                   if (!Audio.sink || !Audio.sink.audio)
                     return
@@ -260,14 +259,14 @@ Item {
                   if (v > 0 && Audio.sink.audio.muted)
                     Audio.sink.audio.muted = false
                 }
+                onIconClicked: Audio.toggleMute()
               }
 
-              SettingsSlider {
+              OsdBar {
                 width: parent.width
                 icon: Audio.micMuted ? "\uf131" : "\uf130"
                 iconColor: Audio.micMuted ? Theme.red : Theme.subtext
                 value: Math.min(1, Audio.micVolume / 100)
-                to: 1
                 onMoved: v => {
                   if (!Audio.source || !Audio.source.audio)
                     return
@@ -275,6 +274,7 @@ Item {
                   if (v > 0 && Audio.source.audio.muted)
                     Audio.source.audio.muted = false
                 }
+                onIconClicked: Audio.toggleMicMute()
               }
             }
           }

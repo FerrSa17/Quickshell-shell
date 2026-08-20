@@ -4,14 +4,14 @@
 # Re-run that script (or change wallpaper) to refresh the palette.
 
 format = """
-[](#dac4b4)\
+[](#bcd2cc)\
 $os\
-[](bg:#cf8c59 fg:#dac4b4)\
+[](bg:#74b4a2 fg:#bcd2cc)\
 $directory\
-[](fg:#cf8c59 bg:#574638)\
+[](fg:#74b4a2 bg:#385755)\
 $git_branch\
 $git_status\
-[](fg:#574638 bg:#342e27)\
+[](fg:#385755 bg:#273434)\
 $package\
 $nodejs\
 $bun\
@@ -19,9 +19,9 @@ $python\
 $rust\
 $golang\
 $php\
-[](fg:#342e27 bg:#24211e)\
+[](fg:#273434 bg:#1e2424)\
 $time\
-[ ](fg:#24211e)\
+[ ](fg:#1e2424)\
 \n$status$character"""
 
 right_format = """$cmd_duration"""
@@ -37,7 +37,7 @@ style = "bold red"
 format = "[$symbol $status ]($style)"
 
 [directory]
-style = "fg:#141717 bg:#cf8c59"
+style = "fg:#141717 bg:#74b4a2"
 format = "[ $path ]($style)"
 truncation_length = 3
 truncation_symbol = "…/"
@@ -50,32 +50,32 @@ truncation_symbol = "…/"
 
 [git_branch]
 symbol = ""
-style = "bg:#574638"
-format = '[[ $symbol $branch ](fg:#d1986b bg:#574638)]($style)'
+style = "bg:#385755"
+format = '[[ $symbol $branch ](fg:#7cc0ad bg:#385755)]($style)'
 
 [git_status]
-style = "bg:#574638"
-format = '[[($all_status$ahead_behind )](fg:#d1986b bg:#574638)]($style)'
+style = "bg:#385755"
+format = '[[($all_status$ahead_behind )](fg:#7cc0ad bg:#385755)]($style)'
 
 [package]
 symbol = "󰏗"
-style = "bg:#342e27"
-format = '[[ $symbol $version ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol $version ](fg:#7cc0ad bg:#273434)]($style)'
 
 [nodejs]
 symbol = ""
-style = "bg:#342e27"
-format = '[[ $symbol ($version) ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol ($version) ](fg:#7cc0ad bg:#273434)]($style)'
 
 [bun]
 symbol = ""
-style = "bg:#342e27"
-format = '[[ $symbol ($version) ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol ($version) ](fg:#7cc0ad bg:#273434)]($style)'
 
 [python]
 symbol = ""
-style = "bg:#342e27"
-format = '[[ $symbol ($version)(\($virtualenv\)) ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol ($version)(\($virtualenv\)) ](fg:#7cc0ad bg:#273434)]($style)'
 detect_extensions = ["py", "ipynb"]
 detect_files = [
   "requirements.txt",
@@ -90,33 +90,33 @@ detect_folders = [".venv", "venv"]
 
 [rust]
 symbol = ""
-style = "bg:#342e27"
-format = '[[ $symbol ($version) ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol ($version) ](fg:#7cc0ad bg:#273434)]($style)'
 
 [golang]
 symbol = ""
-style = "bg:#342e27"
-format = '[[ $symbol ($version) ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol ($version) ](fg:#7cc0ad bg:#273434)]($style)'
 
 [php]
 symbol = ""
-style = "bg:#342e27"
-format = '[[ $symbol ($version) ](fg:#d1986b bg:#342e27)]($style)'
+style = "bg:#273434"
+format = '[[ $symbol ($version) ](fg:#7cc0ad bg:#273434)]($style)'
 
 [time]
 disabled = false
 time_format = "%R"
-style = "bg:#24211e"
-format = '[[  $time ](fg:#c9b5a6 bg:#24211e)]($style)'
+style = "bg:#1e2424"
+format = '[[  $time ](fg:#a6c9bf bg:#1e2424)]($style)'
 
 [cmd_duration]
 min_time = 500
 show_milliseconds = false
-style = "fg:#d1986b"
-format = "[](fg:#24211e)[  $duration ](fg:#c9b5a6 bg:#24211e)[](fg:#24211e)"
+style = "fg:#7cc0ad"
+format = "[](fg:#1e2424)[  $duration ](fg:#a6c9bf bg:#1e2424)[](fg:#1e2424)"
 
 [os]
-style = "bg:#dac4b4 fg:#141717"
+style = "bg:#bcd2cc fg:#141717"
 format = "[ $symbol ]($style)"
 disabled = false
 

@@ -37,7 +37,7 @@ Scope {
       property bool panelHovered: false
       property real panelT: 0
       property real contentT: 0
-      property string uptimeText: "up …"
+      property string bootText: "since …"
       property real mouseSensitivity: 0
       property string weatherTemp: "—"
       property string weatherDesc: "Weather"
@@ -57,6 +57,10 @@ Scope {
       property bool typingOverlayHovered: false
       readonly property bool typingExpanded: typingCardHovered || typingOverlayHovered
       property real typingExpandT: 0
+      property bool screenCardHovered: false
+      property bool screenOverlayHovered: false
+      readonly property bool screenExpanded: screenCardHovered || screenOverlayHovered
+      property real screenExpandT: 0
       property date viewDate: new Date()
 
       ListModel {
@@ -72,6 +76,13 @@ Scope {
       }
       onTypingExpandedChanged: typingExpandT = typingExpanded ? 1 : 0
       Behavior on typingExpandT {
+        NumberAnimation {
+          duration: 240
+          easing.type: Easing.OutCubic
+        }
+      }
+      onScreenExpandedChanged: screenExpandT = screenExpanded ? 1 : 0
+      Behavior on screenExpandT {
         NumberAnimation {
           duration: 240
           easing.type: Easing.OutCubic
@@ -110,7 +121,14 @@ Scope {
         monitorScope.weatherOverlayHovered = false
         monitorScope.typingCardHovered = false
         monitorScope.typingOverlayHovered = false
+        monitorScope.screenCardHovered = false
+        monitorScope.screenOverlayHovered = false
         monitorScope.open = false
+      }
+
+      ExclusivePopup {
+        popupId: "dashboard"
+        host: monitorScope
       }
 
       Connections {
@@ -294,7 +312,7 @@ Scope {
       }
 
       function refreshMeta() {
-        uptimeProc.running = true
+        bootProc.running = true
         weatherProc.running = true
         sensProc.running = true
       }
@@ -310,12 +328,15 @@ Scope {
       }
 
       Process {
-        id: uptimeProc
-        command: ["sh", "-c", "uptime -p 2>/dev/null | sed 's/^up //'"]
+        id: bootProc
+        command: [
+          "bash", "-c",
+          "b=$(awk '/btime/ {print $2}' /proc/stat); date -d @$b +'since %H:%M'"
+        ]
         stdout: StdioCollector {
           onStreamFinished: {
             const t = text.trim()
-            monitorScope.uptimeText = t.length ? ("up " + t) : "up …"
+            monitorScope.bootText = t.length ? t : "since …"
           }
         }
       }
@@ -617,7 +638,7 @@ Scope {
                     ctx.lineWidth = mring.stroke
                     ctx.lineCap = "round"
                     ctx.beginPath()
-                    ctx.strokeStyle = Qt.rgba(Theme.pill.r, Theme.pill.g, Theme.pill.b, 1)
+                    ctx.strokeStyle = Qt.rgba(Theme.barBg.r, Theme.barBg.g, Theme.barBg.b, 1)
                     ctx.arc(cx, cy, r, 0, Math.PI * 2)
                     ctx.stroke()
                     ctx.beginPath()
@@ -715,10 +736,15 @@ Scope {
                   }
 
                   DashCard {
-                    Layout.preferredWidth: 168
-                    Layout.maximumWidth: 168
+                    id: userCard
+                    Layout.preferredWidth: 210
+                    Layout.maximumWidth: 210
                     Layout.fillWidth: false
                     Layout.fillHeight: true
+
+                    HoverHandler {
+                      onHoveredChanged: monitorScope.screenCardHovered = hovered
+                    }
 
                     Row {
                       anchors.fill: parent
@@ -754,7 +780,7 @@ Scope {
                             width: Math.min(tag.implicitWidth + 12, parent.parent.width - 34)
                             height: 20
                             radius: 10
-                            color: Theme.pill
+                            color: Theme.barBg
                             clip: true
 
                             Text {
@@ -787,7 +813,7 @@ Scope {
 
                         Text {
                           width: parent.width
-                          text: monitorScope.uptimeText
+                          text: monitorScope.bootText
                           color: Theme.muted
                           font.family: Theme.fontFamily
                           font.pixelSize: 10
@@ -904,7 +930,7 @@ Scope {
                           width: sensResetLabel.implicitWidth + 12
                           height: 20
                           radius: 8
-                          color: Theme.pill
+                          color: Theme.barBg
 
                           Text {
                             id: sensResetLabel
@@ -921,7 +947,7 @@ Scope {
                             cursorShape: Qt.PointingHandCursor
                             onClicked: monitorScope.setMouseSensitivity(0)
                             onContainsMouseChanged: {
-                              sensResetBtn.color = containsMouse ? Theme.surface : Theme.pill
+                              sensResetBtn.color = containsMouse ? Theme.surface : Theme.barBg
                               sensResetLabel.color = containsMouse ? Theme.text : Theme.subtext
                             }
                             hoverEnabled: true
@@ -943,7 +969,7 @@ Scope {
                           width: parent.width
                           height: 10
                           radius: 5
-                          color: Theme.pill
+                          color: Theme.barBg
                         }
 
                         Rectangle {
@@ -1480,7 +1506,7 @@ Scope {
                           width: mediaCard.artInner
                           height: mediaCard.artInner
                           radius: width / 2
-                          color: Theme.pill
+                          color: Theme.barBg
                           antialiasing: true
 
                           Image {
@@ -1611,7 +1637,7 @@ Scope {
 
                                 // Full/remaining solid track
                                 ctx.beginPath()
-                                ctx.strokeStyle = Qt.rgba(Theme.pill.r, Theme.pill.g, Theme.pill.b, known ? 1 : 0.55)
+                                ctx.strokeStyle = Qt.rgba(Theme.barBg.r, Theme.barBg.g, Theme.barBg.b, known ? 1 : 0.55)
                                 ctx.lineWidth = 5
                                 ctx.lineCap = "round"
                                 ctx.moveTo(known ? cut : 0, mid)
@@ -2169,6 +2195,152 @@ Scope {
 
                           Text {
                             id: dayLabel
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: parent.bottom
+                            text: modelData.label || ""
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 12
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+
+              // Screen time weekly overlay — same hover pattern as typing speed.
+              Rectangle {
+                id: screenOverlay
+                anchors.fill: parent
+                anchors.margins: 16
+                z: 52
+                radius: 18
+                color: Theme.barBg
+                opacity: monitorScope.screenExpandT
+                visible: monitorScope.screenExpandT > 0.01
+                scale: 0.98 + 0.02 * monitorScope.screenExpandT
+                transformOrigin: Item.TopLeft
+                clip: true
+
+                HoverHandler {
+                  onHoveredChanged: monitorScope.screenOverlayHovered = hovered
+                }
+
+                ColumnLayout {
+                  anchors.fill: parent
+                  anchors.margins: 18
+                  spacing: 14
+
+                  RowLayout {
+                    Layout.fillWidth: true
+
+                    Column {
+                      Layout.fillWidth: true
+                      spacing: 4
+
+                      Text {
+                        text: "Screen Time"
+                        color: Theme.text
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 22
+                        font.bold: true
+                      }
+
+                      Text {
+                        text: "Hours at this PC"
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 13
+                      }
+                    }
+
+                    Column {
+                      spacing: 2
+
+                      Text {
+                        anchors.right: parent.right
+                        text: ScreenTime.todayText
+                        color: Theme.sapphire
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 18
+                        font.bold: true
+                      }
+
+                      Text {
+                        anchors.right: parent.right
+                        text: "Today"
+                        color: Theme.subtext
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 12
+                      }
+                    }
+                  }
+
+                  Item {
+                    id: screenChart
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+
+                    readonly property var days: ScreenTime.week
+                    readonly property real maxMs: {
+                      const _ = ScreenTime.rev
+                      let m = 3600000
+                      const list = screenChart.days
+                      if (!list)
+                        return m
+                      for (let i = 0; i < list.length; i++) {
+                        const v = Number(list[i].ms) || 0
+                        if (v > m)
+                          m = v
+                      }
+                      return m
+                    }
+
+                    Row {
+                      anchors.fill: parent
+                      anchors.topMargin: 8
+                      anchors.bottomMargin: 4
+                      spacing: 10
+
+                      Repeater {
+                        model: screenChart.days
+
+                        Item {
+                          required property var modelData
+                          width: Math.max(28, (screenChart.width - 60) / 7)
+                          height: parent.height
+
+                          readonly property real ms: Number(modelData.ms) || 0
+                          readonly property real barH: {
+                            const maxH = Math.max(40, height - 52)
+                            return Math.max(4, maxH * (ms / screenChart.maxMs))
+                          }
+
+                          Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: screenDayLabel.top
+                            anchors.bottomMargin: 8
+                            width: Math.min(36, parent.width - 8)
+                            height: parent.barH
+                            radius: 8
+                            color: Theme.sapphire
+                            opacity: parent.ms > 0 ? 1 : 0.28
+                          }
+
+                          Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            anchors.bottom: screenDayLabel.top
+                            anchors.bottomMargin: parent.barH + 12
+                            text: parent.ms > 0 ? (modelData.text || "") : ""
+                            color: Theme.text
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 11
+                            font.bold: true
+                          }
+
+                          Text {
+                            id: screenDayLabel
                             anchors.horizontalCenter: parent.horizontalCenter
                             anchors.bottom: parent.bottom
                             text: modelData.label || ""

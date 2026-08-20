@@ -16,7 +16,6 @@ Item {
   }
 
   function closeMenu() {
-    panel.pendingAction = ""
     root.open = false
   }
 
@@ -24,20 +23,30 @@ Item {
     root.pendingReturn = kind
     root.returnToControl = true
     root.open = false
-    if (kind === "wallpapers")
-      wallpapers.open = true
-    else if (kind === "shortcuts")
-      shortcuts.open = true
+    PanelBus.claim(kind)
   }
 
   function maybeReturn(kind) {
     if (root.pendingReturn !== kind)
       return
+    if (PanelBus.pendingId === kind || PanelBus.animatingClose)
+      return
     root.pendingReturn = ""
     root.returnToControl = false
     Qt.callLater(() => {
+      if (PanelBus.exclusiveId.length && PanelBus.exclusiveId !== "control")
+        return
+      if (PanelBus.pendingId.length && PanelBus.pendingId !== "control")
+        return
+      if (PanelBus.animatingClose)
+        return
       root.open = true
     })
+  }
+
+  ExclusivePopup {
+    popupId: "control"
+    host: root
   }
 
   Connections {
@@ -51,19 +60,40 @@ Item {
     function onOpenShortcutsRequested() {
       root.openChild("shortcuts")
     }
+    function onOpenWifiRequested() {
+      root.openChild("wifi")
+    }
+    function onOpenBluetoothRequested() {
+      root.openChild("bluetooth")
+    }
     function onScreenshotRequested(mode) {
-      // Close Control so the picker / grim aren't blocked by the popup.
-      panel.pendingAction = ""
+      sheet.snapShut()
       root.open = false
-      Qt.callLater(() => {
-        if (mode === "area") {
-          PanelBus.openScreenshotArea()
-          return
-        }
-        const script = (Quickshell.env("HOME") || "/home/user")
-                       + "/.config/quickshell/scripts/screenshot.sh"
-        Quickshell.execDetached(["bash", script, mode])
-      })
+      shotAfterClose.pendingMode = mode
+      shotAfterClose.restart()
+    }
+  }
+
+  Timer {
+    id: shotAfterClose
+    interval: 16
+    repeat: true
+    property string pendingMode: ""
+    onTriggered: {
+      if (sheet.panelT > 0.01)
+        return
+      stop()
+      const mode = pendingMode
+      pendingMode = ""
+      if (mode === "area") {
+        PanelBus.openScreenshotArea()
+        return
+      }
+      if (!mode.length)
+        return
+      const script = (Quickshell.env("HOME") || "/home/user")
+                     + "/.config/quickshell/scripts/screenshot.sh"
+      Quickshell.execDetached(["bash", script, mode])
     }
   }
 
@@ -80,6 +110,22 @@ Item {
     function onOpenChanged() {
       if (!shortcuts.open)
         root.maybeReturn("shortcuts")
+    }
+  }
+
+  Connections {
+    target: wifiPanel
+    function onOpenChanged() {
+      if (!wifiPanel.open)
+        root.maybeReturn("wifi")
+    }
+  }
+
+  Connections {
+    target: bluetoothPanel
+    function onOpenChanged() {
+      if (!bluetoothPanel.open)
+        root.maybeReturn("bluetooth")
     }
   }
 
@@ -210,11 +256,6 @@ Item {
             focus: true
 
             Keys.onEscapePressed: event => {
-              if (panel.pendingAction !== "") {
-                panel.cancelAction()
-                event.accepted = true
-                return
-              }
               root.closeMenu()
               event.accepted = true
             }
@@ -251,6 +292,18 @@ Item {
     externalAnchor: frame
   }
 
+  RadioPanel {
+    id: wifiPanel
+    kind: "wifi"
+    externalAnchor: frame
+  }
+
+  RadioPanel {
+    id: bluetoothPanel
+    kind: "bluetooth"
+    externalAnchor: frame
+  }
+
   HyprlandFocusGrab {
     active: root.open
     windows: [popup]
@@ -261,10 +314,10 @@ Item {
   }
 
   onOpenChanged: {
-    if (open)
+    if (open) {
+      NetRadio.refreshDevices()
       Qt.callLater(() => panel.forceActiveFocus())
-    else
-      panel.pendingAction = ""
+    }
     PanelBus.controlReserve = open ? sheet.implicitHeight : 0
   }
 

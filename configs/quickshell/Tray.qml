@@ -16,6 +16,11 @@ Item {
 
   property bool open: false
 
+  ExclusivePopup {
+    popupId: "tray"
+    host: root
+  }
+
   function trayClick(item, event, host) {
     if (!item)
       return

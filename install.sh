@@ -6,12 +6,12 @@ REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CONFIGS="$REPO_DIR/configs"
 BACKUP_ROOT="${BACKUP_ROOT:-$HOME/.config-backup-quickshell-shell-$(date +%Y%m%d-%H%M%S)}"
 
-# Override after first GitHub Release publish, e.g.:
-#   https://github.com/<user>/Quickshell-shell/releases/latest/download/wallpapers.tar.zst
-WALLPAPERS_URL="${WALLPAPERS_URL:-}"
+# Default: GitHub Release asset from this repo.
+WALLPAPERS_URL="${WALLAPERS_URL:-https://github.com/FerrSa17/Quickshell-shell/releases/latest/download/wallpapers.tar.zst}"
 WALLPAPERS_DIR="${WALLPAPERS_DIR:-$HOME/Wallpaper}"
 
 PAC_PKGS=(
+  # Desktop / shell
   hyprland
   quickshell
   kitty
@@ -19,15 +19,32 @@ PAC_PKGS=(
   fish
   starship
   awww
+  # Capture / clipboard
   grim
   slurp
-  ddcutil
-  playerctl
-  wireplumber
+  wl-clipboard
+  cliphist
+  file
+  # Network / Bluetooth (Control panel Wi‑Fi & BT)
+  networkmanager
+  bluez
+  bluez-utils
+  # Audio / media / brightness
   pipewire
+  wireplumber
+  playerctl
+  brightnessctl
+  ddcutil
+  # Theming / icons / fonts / cursors deps
   ttf-jetbrains-mono-nerd
   papirus-icon-theme
+  gdk-pixbuf2
+  # Python stack used by scripts (wallpaper colors, BT pair agent)
   python
+  python-dbus
+  python-gobject
+  # CLI helpers
+  jq
   zoxide
   lsd
   bat
@@ -41,8 +58,7 @@ PAC_PKGS=(
 )
 
 AUR_PKGS=(
-  # optional extras used by fish aliases / polish
-  # wipeclean
+  bibata-cursor-theme-bin
 )
 
 log() { printf '\n\033[1;36m==>\033[0m %s\n' "$*"; }
@@ -77,9 +93,22 @@ install_arch_packages() {
   if ((${#AUR_PKGS[@]})) && command -v yay >/dev/null 2>&1; then
     log "Installing AUR packages with yay"
     yay -S --needed --noconfirm "${AUR_PKGS[@]}"
+  elif ((${#AUR_PKGS[@]})) && command -v paru >/dev/null 2>&1; then
+    log "Installing AUR packages with paru"
+    paru -S --needed --noconfirm "${AUR_PKGS[@]}"
   elif ((${#AUR_PKGS[@]})); then
     warn "AUR helper not found; skip: ${AUR_PKGS[*]}"
+    warn "Install Bibata cursors manually or install yay/paru and re-run --packages-only"
   fi
+}
+
+enable_services() {
+  if ! command -v systemctl >/dev/null 2>&1; then
+    return 0
+  fi
+  log "Enable NetworkManager + bluetooth (sudo)"
+  sudo systemctl enable --now NetworkManager.service 2>/dev/null || warn "Could not enable NetworkManager"
+  sudo systemctl enable --now bluetooth.service 2>/dev/null || warn "Could not enable bluetooth"
 }
 
 install_configs() {
@@ -87,12 +116,12 @@ install_configs() {
 
   mkdir -p "$HOME/.config" "$HOME/.local/state/quickshell" "$HOME/.cache/quickshell"
 
+  # Full-tree installs (rsync --delete keeps rice clean).
   local pairs=(
     "quickshell:$HOME/.config/quickshell"
     "hypr:$HOME/.config/hypr"
     "kitty:$HOME/.config/kitty"
     "yazi:$HOME/.config/yazi"
-    "fish:$HOME/.config/fish"
     "starship:$HOME/.config/starship"
   )
 
@@ -110,39 +139,60 @@ install_configs() {
       --exclude '__pycache__/' \
       --exclude '*.pyc' \
       --exclude 'colors.json' \
+      --exclude '.backup*/' \
+      --exclude '.restored*/' \
       "$CONFIGS/$name/" "$dest/"
   done
 
-  # fish: only ship config.fish (keep user's fish_variables if present)
+  # fish: only ship config.fish — never wipe fish_variables / functions
   if [[ -f "$CONFIGS/fish/config.fish" ]]; then
     mkdir -p "$HOME/.config/fish"
     backup_path "$HOME/.config/fish/config.fish"
+    log "Install fish/config.fish"
     cp -f "$CONFIGS/fish/config.fish" "$HOME/.config/fish/config.fish"
+  fi
+
+  # Ensure helper scripts are executable
+  if [[ -d "$HOME/.config/quickshell/scripts" ]]; then
+    chmod +x "$HOME/.config/quickshell/scripts/"*.sh 2>/dev/null || true
+    chmod +x "$HOME/.config/quickshell/scripts/"*.py 2>/dev/null || true
+  fi
+  if [[ -f "$HOME/.config/starship/apply-colors.py" ]]; then
+    chmod +x "$HOME/.config/starship/apply-colors.py"
+  fi
+  if [[ -f "$HOME/.config/yazi/apply-wallpaper-theme.py" ]]; then
+    chmod +x "$HOME/.config/yazi/apply-wallpaper-theme.py"
   fi
 }
 
 install_wallpapers() {
   mkdir -p "$WALLPAPERS_DIR"/{Light,Dark,Calm}
 
-  if [[ -z "$WALLPAPERS_URL" ]]; then
+  local url="$WALLPAPERS_URL"
+  if [[ -z "$url" ]]; then
     if [[ -f "$REPO_DIR/dist/wallpapers.tar.zst" ]]; then
-      WALLPAPERS_URL="file://$REPO_DIR/dist/wallpapers.tar.zst"
+      url="file://$REPO_DIR/dist/wallpapers.tar.zst"
     else
-      warn "WALLPAPERS_URL not set and dist/wallpapers.tar.zst missing."
-      warn "Pack with ./pack-wallpapers.sh, upload Release asset, then:"
-      warn "  WALLPAPERS_URL=https://github.com/<USER>/Quickshell-shell/releases/latest/download/wallpapers.tar.zst ./install.sh --wallpapers-only"
+      warn "WALLPAPERS_URL empty and dist/wallpapers.tar.zst missing."
       return 0
     fi
+  fi
+
+  # Prefer local archive when present (offline / maintainer test).
+  if [[ -f "$REPO_DIR/dist/wallpapers.tar.zst" && "$url" == https://* ]]; then
+    warn "Using local dist/wallpapers.tar.zst instead of remote URL"
+    url="file://$REPO_DIR/dist/wallpapers.tar.zst"
   fi
 
   local tmp archive
   tmp="$(mktemp -d)"
   archive="$tmp/wallpapers.tar.zst"
-  log "Download wallpapers from $WALLPAPERS_URL"
-  if [[ "$WALLPAPERS_URL" == file://* ]]; then
-    cp "${WALLPAPERS_URL#file://}" "$archive"
+  log "Download wallpapers from $url"
+  if [[ "$url" == file://* ]]; then
+    cp "${url#file://}" "$archive"
   else
-    curl -fL --progress-bar -o "$archive" "$WALLPAPERS_URL"
+    curl -fL --progress-bar -o "$archive" "$url" \
+      || die "Wallpaper download failed. Set WALLPAPERS_URL or place dist/wallpapers.tar.zst"
   fi
   log "Extract → $WALLPAPERS_DIR"
   tar --zstd -xf "$archive" -C "$WALLPAPERS_DIR" --strip-components=1 2>/dev/null \
@@ -159,6 +209,41 @@ setup_shell() {
   fi
 }
 
+verify_install() {
+  log "Quick self-check"
+  local missing=0
+  local f
+  for f in \
+    "$HOME/.config/quickshell/shell.qml" \
+    "$HOME/.config/quickshell/Bar.qml" \
+    "$HOME/.config/quickshell/NetRadio.qml" \
+    "$HOME/.config/quickshell/BtRadio.qml" \
+    "$HOME/.config/quickshell/ClipboardHistory.qml" \
+    "$HOME/.config/quickshell/scripts/bt-pair.py" \
+    "$HOME/.config/quickshell/scripts/apply-wallpaper-theme.sh" \
+    "$HOME/.config/hypr/hyprland.lua" \
+    "$HOME/.config/hypr/modules/autostart.lua"
+  do
+    if [[ ! -e "$f" ]]; then
+      warn "Missing: $f"
+      missing=1
+    fi
+  done
+
+  for f in qs awww grim slurp wl-copy cliphist nmcli bluetoothctl python3; do
+    if ! command -v "$f" >/dev/null 2>&1; then
+      warn "Command not on PATH: $f"
+      missing=1
+    fi
+  done
+
+  if ((missing == 0)); then
+    log "Self-check OK"
+  else
+    warn "Self-check found gaps — see warnings above"
+  fi
+}
+
 print_next() {
   cat <<EOF
 
@@ -169,6 +254,9 @@ Next:
   1) Log out / reboot
   2) Start Hyprland session
   3) Quickshell starts via hypr autostart (bar + lock)
+
+Features on the bar Control panel:
+  Wi‑Fi / Bluetooth / clipboard history / wallpapers / shortcuts
 
 Optional plugins: hyprglass via hyprpm (see configs/hypr/modules/plugins.lua)
 
@@ -182,15 +270,17 @@ usage() {
   cat <<EOF
 Usage: ./install.sh [options]
 
-  (default)          packages + configs + wallpapers
-  --packages-only    only pacman packages
+  (default)          packages + services + configs + wallpapers
+  --packages-only    only pacman/AUR packages (+ enable services)
   --configs-only     only copy configs (backup first)
   --wallpapers-only  only fetch/extract wallpapers
   -h, --help         this help
 
 Env:
   WALLPAPERS_URL   URL or file:// path to wallpapers.tar.zst
+                  (default: GitHub latest release asset)
   WALLPAPERS_DIR   default: \$HOME/Wallpaper
+  BACKUP_ROOT     where existing configs are copied before overwrite
 EOF
 }
 
@@ -209,14 +299,25 @@ main() {
   need_cmd curl
 
   case "$mode" in
-    packages) install_arch_packages ;;
-    configs) install_configs; setup_shell ;;
-    wallpapers) install_wallpapers ;;
+    packages)
+      install_arch_packages
+      enable_services
+      ;;
+    configs)
+      install_configs
+      setup_shell
+      verify_install
+      ;;
+    wallpapers)
+      install_wallpapers
+      ;;
     all)
       install_arch_packages
+      enable_services
       install_configs
       setup_shell
       install_wallpapers
+      verify_install
       ;;
   esac
 

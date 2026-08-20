@@ -9,6 +9,8 @@ Singleton {
   signal openSettingsRequested
   signal openWallpapersRequested
   signal openShortcutsRequested
+  signal openWifiRequested
+  signal openBluetoothRequested
   // mode: "light" | "calm" | "dark"
   signal appearanceModeRequested(string mode)
   // mode: "area" | "full" | "window"
@@ -25,13 +27,86 @@ Singleton {
   signal openSysMonRequested
   signal closeSysMonRequested
 
-  // Height reserved under the top chrome by frameCorner panels (Control / notifs).
-  // Toasts dock flush below this so they touch the open panel and the right frame.
   property int controlReserve: 0
   property int notifReserve: 0
-  readonly property int frameCornerReserve: Math.max(controlReserve, notifReserve)
+  property int clipboardReserve: 0
+  readonly property int frameCornerReserve: Math.max(controlReserve, notifReserve, clipboardReserve)
+
+  signal closeNotificationsRequested
+  signal closeClipboardRequested
+
+  // Only one named popup at a time. A new claim waits until the previous
+  // close animation finishes before the next panel is allowed to open.
+  property string exclusiveId: ""
+  property string pendingId: ""
+  property bool animatingClose: false
+  signal exclusiveChanged(string id)
+
+  readonly property int popupHandoffMs: 290
 
   property bool appearanceForceWallpaper: false
+
+  function claim(id) {
+    if (!id)
+      return true
+    if (id === "screenshot") {
+      pendingId = ""
+      animatingClose = false
+      handoff.stop()
+      exclusiveId = id
+      exclusiveChanged(id)
+      return true
+    }
+    if (exclusiveId === id && !animatingClose)
+      return true
+    if (animatingClose || (exclusiveId.length && exclusiveId !== id)) {
+      pendingId = id
+      if (exclusiveId.length) {
+        exclusiveId = ""
+        animatingClose = true
+        exclusiveChanged("")
+      }
+      handoff.restart()
+      return false
+    }
+    pendingId = ""
+    exclusiveId = id
+    exclusiveChanged(id)
+    return true
+  }
+
+  function release(id) {
+    if (exclusiveId !== id)
+      return
+    exclusiveId = ""
+    animatingClose = true
+    handoff.restart()
+  }
+
+  function closeAllPopups() {
+    pendingId = ""
+    animatingClose = false
+    handoff.stop()
+    exclusiveId = ""
+    exclusiveChanged("")
+  }
+
+  function finishClose() {
+    animatingClose = false
+    if (!pendingId.length)
+      return
+    const next = pendingId
+    pendingId = ""
+    exclusiveId = next
+    exclusiveChanged(next)
+  }
+
+  Timer {
+    id: handoff
+    interval: root.popupHandoffMs
+    repeat: false
+    onTriggered: root.finishClose()
+  }
 
   function openSettings() {
     openSettingsRequested()
@@ -43,6 +118,14 @@ Singleton {
 
   function openShortcuts() {
     openShortcutsRequested()
+  }
+
+  function openWifi() {
+    openWifiRequested()
+  }
+
+  function openBluetooth() {
+    openBluetoothRequested()
   }
 
   function setAppearanceMode(mode, forceWallpaper) {

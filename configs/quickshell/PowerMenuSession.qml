@@ -9,7 +9,6 @@ Item {
   id: root
   anchors.fill: parent
 
-  property bool showLockTile: true
   property bool edgeHovered: false
   property bool panelHovered: false
   property bool open: false
@@ -270,12 +269,6 @@ Item {
             glyphColor: root.pendingAction === "poweroff" ? Theme.windowBg : Theme.red
             confirm: root.pendingAction === "poweroff"
             onActivated: root.requestDanger("poweroff")
-          }
-
-          PowerTile {
-            visible: root.showLockTile
-            avatar: true
-            onActivated: root.run("logout")
           }
 
           PowerTile {

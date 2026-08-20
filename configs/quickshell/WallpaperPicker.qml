@@ -25,11 +25,29 @@ Item {
     return root.allGroups
   }
   property string activeGroup: "Calm"
-  readonly property string transition: "fade"
   readonly property Item popupAnchor: externalAnchor || button
 
   property bool open: false
   property string currentPath: ""
+
+  ExclusivePopup {
+    popupId: "wallpapers"
+    host: root
+  }
+
+  function awwwImgCommand(path) {
+    const kind = Theme.pourKind
+    const args = [
+      "awww", "img", path,
+      "--transition-type", kind,
+      "--transition-duration", String(Theme.pourMs / 1000),
+      "--transition-bezier", Theme.pourBezier,
+      "--transition-fps", "60"
+    ]
+    if (kind === "grow" || kind === "outer" || kind === "center")
+      args.push("--transition-pos", "0.5,0.5")
+    return args
+  }
 
   function groupFolder(name) {
     return "file://" + root.wallpaperDir + "/" + name
@@ -52,14 +70,11 @@ Item {
       root.activeGroup = prefer
   }
 
-  function setWallpaper(path) {
-    // Theme only for the chosen wallpaper (no hover preview); blends with awww fade.
+  function setWallpaper(path, skipPick) {
+    if (!skipPick)
+      Theme.pickPour()
     Theme.applyFromWallpaper(path)
-    Quickshell.execDetached([
-      "awww", "img", path,
-      "--transition-type", root.transition,
-      "--transition-duration", "1.5"
-    ])
+    Quickshell.execDetached(root.awwwImgCommand(path))
     currentPath = path
     open = false
   }
@@ -97,6 +112,7 @@ Item {
       ShellPrefs.persistSoon()
     }
     root.activeGroup = root.folderForMode(mode)
+    Theme.pickPour()
     if (mode === "light")
       Theme.applyFixedPalette("light", true)
     else if (mode === "dark")
@@ -117,7 +133,7 @@ Item {
       onStreamFinished: {
         const path = text.trim()
         if (path.length)
-          root.setWallpaper(path)
+          root.setWallpaper(path, true)
         else if (!ShellPrefs.extractTheme)
           Theme.syncAppearancePalette(true)
       }

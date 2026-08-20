@@ -19,5 +19,9 @@ ShellRoot {
   QtObject {
     readonly property bool _autoBrightness: AutoBrightness.isDay
     readonly property int _typing: TypingStats.rev
+    readonly property int _screen: ScreenTime.rev
+    readonly property int _clipboard: ClipboardHistory.rev
+    readonly property int _net: NetRadio.rev
+    readonly property int _bt: BtRadio.rev
   }
 }

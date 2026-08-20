@@ -32,6 +32,11 @@ Singleton {
   property var blendTo: ({})
   property real blendT: 1
   property bool animateColors: false
+  property real pourStart: 0
+  property string pourKind: "left"
+  readonly property var pourKinds: ["fade", "left", "right", "top", "bottom", "grow", "center", "outer"]
+  readonly property int pourMs: 1400
+  readonly property string pourBezier: "0.65,0.0,0.35,1.0"
 
   readonly property string colorsPath: (Quickshell.env("HOME") || "/home/user")
                                        + "/.config/quickshell/colors.json"
@@ -53,6 +58,58 @@ Singleton {
       return h.length < 2 ? "0" + h : h
     }
     return "#" + toByte(r) + toByte(g) + toByte(bl)
+  }
+
+  function cubicBez(s, a, b) {
+    const is = 1 - s
+    return 3 * is * is * s * a + 3 * is * s * s * b + s * s * s
+  }
+
+  function easePour(t) {
+    const p = String(root.pourBezier || "").split(",")
+    const x1 = Number(p[0]) || 0.65
+    const y1 = Number(p[1]) || 0
+    const x2 = Number(p[2]) || 0.35
+    const y2 = Number(p[3]) || 1
+    const u = Math.max(0, Math.min(1, t))
+    let lo = 0
+    let hi = 1
+    let s = u
+    for (let i = 0; i < 14; i++) {
+      const x = root.cubicBez(s, x1, x2)
+      if (x < u)
+        lo = s
+      else
+        hi = s
+      s = (lo + hi) / 2
+    }
+    return root.cubicBez(s, y1, y2)
+  }
+
+  function palettesMatch(a, b) {
+    if (!a || !b)
+      return false
+    const keys = ["windowBg", "pill", "sapphire", "bg", "text"]
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[i]
+      if (String(a[k] || "") !== String(b[k] || ""))
+        return false
+    }
+    return true
+  }
+
+  function pickPour() {
+    const kinds = root.pourKinds
+    const n = kinds.length
+    if (n < 1)
+      return root.pourKind
+    let k = kinds[Math.floor(Math.random() * n)]
+    if (n > 1) {
+      for (let i = 0; i < 8 && k === root.pourKind; i++)
+        k = kinds[Math.floor(Math.random() * n)]
+    }
+    root.pourKind = k
+    return k
   }
 
   function hex(key, fallback) {
@@ -211,6 +268,11 @@ Singleton {
     )
   }
 
+  function dim(c, amount) {
+    const a = Math.max(0, Math.min(1, amount))
+    return Qt.rgba(c.r * (1 - a), c.g * (1 - a), c.b * (1 - a), c.a)
+  }
+
   // Gruvbox Dark fallbacks when colors.json is missing
   readonly property color bg: {
     const _ = root.paletteRev
@@ -231,16 +293,11 @@ Singleton {
     const __ = root.blendT
     const ___ = ShellPrefs.appearanceMode
     const raw = hex("pill", "#504945")
-    // primary_container from matugen — strongest wallpaper signal for buttons/pills
-    return ShellPrefs.extractTheme ? tintPrimary(raw, 0.18) : Qt.color(raw)
+    const c = ShellPrefs.extractTheme ? tintPrimary(raw, 0.18) : Qt.color(raw)
+    return dim(c, 0.2)
   }
-  readonly property color well: {
-    const _ = root.paletteRev
-    const __ = root.blendT
-    const ___ = ShellPrefs.appearanceMode
-    const raw = hex("well", "#3c3836")
-    return ShellPrefs.extractTheme ? tintPrimary(raw, 0.28) : Qt.color(raw)
-  }
+  // Same fill as bar pills — insets/cards/tracks used to pick up a separate purple.
+  readonly property color well: pill
   readonly property color text: {
     const _ = root.paletteRev
     const __ = root.blendT
@@ -413,10 +470,17 @@ Singleton {
 
   function applyPalette(parsed, animate) {
     const next = parsed && typeof parsed === "object" ? clonePalette(parsed) : ({})
+    if (Object.keys(next).length < 1 && Object.keys(root.blendTo).length > 0)
+      return
+
     const doAnim = animate === true && root.animateColors
+    if (doAnim && root.palettesMatch(next, root.blendTo) && pourTick.running)
+      return
+    if (doAnim && root.palettesMatch(next, root.visualPalette()) && !pourTick.running)
+      return
 
     if (!doAnim) {
-      blendAnim.stop()
+      pourTick.stop()
       root.blendFrom = next
       root.blendTo = next
       root.palette = next
@@ -430,43 +494,35 @@ Singleton {
     root.palette = next
     root.blendT = 0
     root.paletteRev++
-    blendAnim.restart()
+    root.pourStart = Date.now()
+    pourTick.restart()
   }
 
-  NumberAnimation {
-    id: blendAnim
-    target: root
-    property: "blendT"
-    from: 0
-    to: 1
-    // Match awww fade (~1.5s) so chrome pours while wallpaper settles.
-    duration: 1400
-    easing.type: Easing.InOutCubic
-    onStopped: {
-      root.blendFrom = root.clonePalette(root.blendTo)
-      root.blendT = 1
+  Timer {
+    id: pourTick
+    interval: 16
+    repeat: true
+    onTriggered: {
+      const elapsed = Date.now() - root.pourStart
+      const u = Math.max(0, Math.min(1, elapsed / root.pourMs))
+      root.blendT = root.easePour(u)
       root.paletteRev++
+      if (u >= 1) {
+        stop()
+        root.blendFrom = root.clonePalette(root.blendTo)
+        root.blendT = 1
+        root.paletteRev++
+      }
     }
-  }
-
-  // QML does not track property reads inside functions — bump rev each frame
-  // so every Theme.* color binding (bar, pills, popups) re-evaluates during the pour.
-  onBlendTChanged: {
-    if (blendAnim.running)
-      root.paletteRev++
   }
 
   function reloadPalette() {
     try {
       const raw = colorsFile.text()
-      if (!raw || raw.length < 2) {
-        applyPalette({}, false)
+      if (!raw || raw.length < 2)
         return
-      }
       applyPalette(JSON.parse(raw), root.animateColors)
-    } catch (e) {
-      applyPalette({}, false)
-    }
+    } catch (e) {}
   }
 
   function rememberPendingPalette() {
@@ -588,10 +644,10 @@ Singleton {
     }
     onFileChanged: colorsFile.reload()
     onLoaded: {
-      // Disk reloads after matugen — ignore while Light/Dark fixed chrome is active.
       if (!ShellPrefs.extractTheme)
         return
-      // Disk reloads after matugen — animate once colors are allowed.
+      if (themeProc.running)
+        return
       root.reloadPalette()
       root.rememberPendingPalette()
     }

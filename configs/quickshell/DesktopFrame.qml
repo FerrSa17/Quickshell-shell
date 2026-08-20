@@ -34,9 +34,14 @@ Scope {
       WlrLayershell.layer: WlrLayer.Bottom
       WlrLayershell.keyboardFocus: WlrKeyboardFocus.None
 
-      // Chrome pours left→right when the wallpaper theme blends (Theme.blendT).
+      // Chrome matches the current wallpaper pour (Theme.pourKind + Theme.blendT).
       Item {
+        id: chrome
         anchors.fill: parent
+
+        readonly property real t: Math.max(0, Math.min(1, Theme.blendT))
+        readonly property real diag: Math.sqrt(width * width + height * height)
+        readonly property string kind: Theme.pourKind
 
         layer.enabled: true
         layer.smooth: true
@@ -54,11 +59,70 @@ Scope {
         }
 
         Rectangle {
+          anchors.fill: parent
+          color: Theme.barBgTo
+          opacity: chrome.kind === "fade" ? chrome.t : 0
+          visible: chrome.kind === "fade"
+        }
+
+        Rectangle {
           anchors.top: parent.top
           anchors.bottom: parent.bottom
           anchors.left: parent.left
-          width: Math.ceil(parent.width * Math.max(0, Math.min(1, Theme.blendT)))
+          width: Math.ceil(parent.width * chrome.t)
           color: Theme.barBgTo
+          visible: chrome.kind === "left"
+        }
+
+        Rectangle {
+          anchors.top: parent.top
+          anchors.bottom: parent.bottom
+          anchors.right: parent.right
+          width: Math.ceil(parent.width * chrome.t)
+          color: Theme.barBgTo
+          visible: chrome.kind === "right"
+        }
+
+        Rectangle {
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.top: parent.top
+          height: Math.ceil(parent.height * chrome.t)
+          color: Theme.barBgTo
+          visible: chrome.kind === "top"
+        }
+
+        Rectangle {
+          anchors.left: parent.left
+          anchors.right: parent.right
+          anchors.bottom: parent.bottom
+          height: Math.ceil(parent.height * chrome.t)
+          color: Theme.barBgTo
+          visible: chrome.kind === "bottom"
+        }
+
+        Rectangle {
+          anchors.fill: parent
+          color: Theme.barBgTo
+          visible: chrome.kind === "outer"
+        }
+
+        Rectangle {
+          width: chrome.diag * chrome.t
+          height: width
+          radius: width / 2
+          anchors.centerIn: parent
+          color: Theme.barBgTo
+          visible: chrome.kind === "grow" || chrome.kind === "center"
+        }
+
+        Rectangle {
+          width: chrome.diag * (1 - chrome.t)
+          height: width
+          radius: width / 2
+          anchors.centerIn: parent
+          color: Theme.barBgFrom
+          visible: chrome.kind === "outer"
         }
       }
 

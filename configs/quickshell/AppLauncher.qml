@@ -18,6 +18,11 @@ Scope {
   property bool queuedOpen: false
   property bool panelHovered: false
 
+  ExclusivePopup {
+    popupId: "launcher"
+    host: root
+  }
+
   // Hotkey only: Super+W (qs ipc call launcher toggle).
   readonly property int edgeHitH: Theme.frameThickness + 4
   readonly property int edgeHitW: 280
@@ -641,31 +646,21 @@ Scope {
             width: parent.width
             height: root.maxListH
 
-            function moveSelectionTo(item) {
-              if (!item)
-                return
-              const p = item.mapToItem(listHost, 0, 0)
-              selectionRing.x = p.x
-              selectionRing.y = p.y
-              selectionRing.width = item.width
-              selectionRing.height = item.height
-              selectionRing.ready = true
-            }
-
             Rectangle {
               id: selectionRing
-              property bool ready: false
               width: listHost.width
               height: root.rowH
+              x: 0
+              y: Math.max(0, root.selectedInWindow) * (root.rowH + root.listRowSpacing)
               radius: 12
               color: Theme.pill
               z: 0
-              opacity: ready && root.contentT > 0.2 && root.fullList.length > 0
+              opacity: root.contentT > 0.2 && root.fullList.length > 0
                      && root.selectedInWindow >= 0 && root.selectedInWindow < root.windowSize ? 1 : 0
               visible: opacity > 0.01
 
               Behavior on y {
-                enabled: selectionRing.ready && root.contentT >= 0.999
+                enabled: root.contentT >= 0.999 && !searchField.activeFocus
                 NumberAnimation {
                   duration: 220
                   easing.type: Easing.OutCubic
@@ -701,20 +696,6 @@ Scope {
                   opacity: 0.2 + 0.8 * enter
                   transform: Translate {
                     y: (1 - enter) * 10
-                  }
-
-                  onSelectedChanged: {
-                    if (selected)
-                      listHost.moveSelectionTo(row)
-                  }
-                  onEnterChanged: {
-                    if (selected)
-                      listHost.moveSelectionTo(row)
-                  }
-
-                  Component.onCompleted: {
-                    if (row.selected)
-                      Qt.callLater(() => listHost.moveSelectionTo(row))
                   }
 
                   Row {
@@ -754,7 +735,13 @@ Scope {
                     anchors.fill: parent
                     hoverEnabled: true
                     cursorShape: Qt.PointingHandCursor
-                    onEntered: root.cursor = root.windowStart + row.index
+                    onEntered: {
+                      // While typing, keep selection pinned to the first result
+                      // so Enter always launches the top match.
+                      if (searchField.activeFocus)
+                        return
+                      root.cursor = root.windowStart + row.index
+                    }
                     onClicked: root.launch(row.modelData)
                   }
                 }
@@ -778,7 +765,6 @@ Scope {
 
   onOpenChanged: {
     if (open) {
-      selectionRing.ready = false
       const s = resolveScreen()
       if (s)
         win.screen = s
@@ -788,7 +774,6 @@ Scope {
       rebuildList()
       Qt.callLater(() => searchField.forceActiveFocus())
     } else {
-      selectionRing.ready = false
       root.panelHovered = false
     }
   }

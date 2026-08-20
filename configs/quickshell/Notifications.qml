@@ -11,7 +11,7 @@ Singleton {
   // Notification centers open across monitors (Bar Variants).
   property int centerOpenCount: 0
   readonly property bool centerOpen: centerOpenCount > 0
-  readonly property bool suppressToasts: dnd || centerOpen
+  readonly property bool suppressToasts: dnd || centerOpen || ActiveApp.fullscreenActive
   readonly property int count: historyModel.count
   readonly property alias history: historyModel
   readonly property alias toasts: toastModel
@@ -19,6 +19,15 @@ Singleton {
   readonly property int toastH: 72
   readonly property int toastGap: 0
   readonly property int toastStride: toastH + toastGap
+
+  Connections {
+    target: ActiveApp
+    function onFullscreenActiveChanged() {
+      // Drop on-screen popups over fullscreen video; history stays in the center.
+      if (ActiveApp.fullscreenActive)
+        toastModel.clear()
+    }
+  }
 
   function retainCenter() {
     centerOpenCount++

@@ -32,6 +32,11 @@ Item {
     root.open = false
   }
 
+  ExclusivePopup {
+    popupId: "notifications"
+    host: root
+  }
+
   IconButton {
     id: button
     icon: "\uf0f3"
@@ -65,6 +70,7 @@ Item {
 
   onOpenChanged: {
     if (open) {
+      PanelBus.closeClipboardRequested()
       Notifications.retainCenter()
       root.pendingClear = false
       Qt.callLater(() => panel.forceActiveFocus())
@@ -79,6 +85,13 @@ Item {
     if (root.open)
       Notifications.releaseCenter()
     PanelBus.notifReserve = 0
+  }
+
+  Connections {
+    target: PanelBus
+    function onCloseNotificationsRequested() {
+      root.open = false
+    }
   }
 
   LayerPopup {
@@ -455,7 +468,7 @@ Item {
             Layout.fillWidth: true
             Layout.preferredHeight: actionsRow.implicitHeight + 20
             radius: 16
-            color: Theme.well
+            color: Theme.barBg
 
             RowLayout {
               id: actionsRow

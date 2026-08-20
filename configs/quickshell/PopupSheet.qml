@@ -71,6 +71,13 @@ Item {
     return inner.children[0].implicitHeight
   }
 
+  function snapShut() {
+    openAnim.stop()
+    closeAnim.stop()
+    panelT = 0
+    contentT = 0
+  }
+
   onExpandedChanged: {
     openAnim.stop()
     closeAnim.stop()

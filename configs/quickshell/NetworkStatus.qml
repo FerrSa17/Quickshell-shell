@@ -38,13 +38,25 @@ Item {
   Text {
     id: icon
     text: {
+      const _ = NetRadio.rev
+      if (NetRadio.canSwitch && NetRadio.linkMode === "wifi")
+        return "\uf1eb"
+      if (NetRadio.canSwitch && NetRadio.linkMode === "wired")
+        return "\uf0e8"
       if (!root.online)
         return "\uf127"
       if (root.wifi)
         return "\uf1eb"
       return "\uf0e8"
     }
-    color: root.online ? Theme.text : Theme.muted
+    color: {
+      const _ = NetRadio.rev
+      if (NetRadio.canSwitch && NetRadio.linkMode === "wifi")
+        return NetRadio.wifiConnected ? Theme.text : Theme.muted
+      if (NetRadio.canSwitch && NetRadio.linkMode === "wired")
+        return NetRadio.ethernetConnected ? Theme.text : Theme.muted
+      return root.online ? Theme.text : Theme.muted
+    }
     font.family: Theme.fontFamily
     font.pixelSize: Theme.iconSize
     font.weight: Theme.barFontWeight

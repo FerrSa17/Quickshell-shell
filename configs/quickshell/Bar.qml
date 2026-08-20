@@ -280,6 +280,10 @@ Scope {
               anchors.verticalCenter: parent.verticalCenter
             }
 
+            ClipboardCenter {
+              anchors.verticalCenter: parent.verticalCenter
+            }
+
             SystemMenu {}
 
             Tray {

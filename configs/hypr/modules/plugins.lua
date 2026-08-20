@@ -77,6 +77,7 @@ if hl.plugin.hyprglass then
     hg.layer("quickshell", { exclude = true })
     hg.layer("quickshell-frame", { exclude = true })
     hg.layer("quickshell-desktop", { exclude = true })
+    hg.layer("quickshell-screenshot", { exclude = true })
     hg.layer("selection", { exclude = true })
 
     hl.window_rule({ match = { class = "mpv" }, tag = "+hyprglass_disabled" })

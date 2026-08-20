@@ -14,6 +14,11 @@ Item {
   property bool open: false
   property string lang: ShellPrefs.uiLanguage === "en" ? "en" : "ru"
 
+  ExclusivePopup {
+    popupId: "shortcuts"
+    host: root
+  }
+
   readonly property Item popupAnchor: externalAnchor
   readonly property var sections: KeybindsData.sections
 

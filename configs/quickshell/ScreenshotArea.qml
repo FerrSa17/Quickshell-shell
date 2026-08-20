@@ -9,21 +9,31 @@ Scope {
   id: root
 
   property bool active: false
-  // "select" | "brush" | "rect" | "ellipse" | "arrow" | "eraser"
+  property int freezeGen: 0
+  // "select" | "brush" | "rect" | "ellipse" | "arrow" | "text" | "eraser"
   property string tool: "select"
   readonly property int cornerRadius: 12
   readonly property int handleSize: 10
   readonly property color ink: Theme.red
   readonly property real inkWidth: 3
   readonly property real brushWidth: 4
+  readonly property int textSize: 18
 
   property string saveDir: (Quickshell.env("HOME") || "/home/user") + "/Pictures/Screenshots"
+  readonly property string shotScript: (Quickshell.env("HOME") || "/home/user")
+                                       + "/.config/quickshell/scripts/screenshot.sh"
 
   Connections {
     target: PanelBus
     function onScreenshotAreaRequested() {
+      PanelBus.claim("screenshot")
       root.tool = "select"
+      root.freezeGen++
       root.active = true
+    }
+    function onExclusiveChanged(id) {
+      if (id !== "screenshot" && root.active)
+        root.cancel()
     }
   }
 
@@ -37,6 +47,7 @@ Scope {
   function cancel() {
     root.active = false
     root.tool = "select"
+    PanelBus.release("screenshot")
   }
 
   function pad2(n) {
@@ -125,7 +136,7 @@ Scope {
       required property var modelData
       screen: modelData
 
-      visible: root.active
+      visible: root.active && win.freezeReady
       color: "transparent"
       aboveWindows: true
       focusable: true
@@ -140,7 +151,7 @@ Scope {
         right: true
       }
 
-      readonly property string freezePath: "/tmp/qs-shot-freeze-" + modelData.name + ".png"
+      readonly property string freezePath: "/tmp/qs-shot-freeze-" + modelData.name + "-" + root.freezeGen + ".png"
       property url freezeUrl: ""
       property bool freezeReady: false
 
@@ -170,6 +181,16 @@ Scope {
       property real drawX2: 0
       property real drawY2: 0
       property var draftPts: []
+      property bool textEditing: false
+      property real textX: 0
+      property real textY: 0
+      property string textDraft: ""
+      property bool toolsMoved: false
+      property real toolsX: 0
+      property real toolsY: 0
+      property bool actionsMoved: false
+      property real actionsX: 0
+      property real actionsY: 0
 
       // [{t,x1,y1,x2,y2} | {t:"brush", pts:[[x,y],...]}]
       property var shapes: []
@@ -191,6 +212,11 @@ Scope {
         resizeHandle = ""
         shapes = []
         draftPts = []
+        textEditing = false
+        textX = 0
+        textY = 0
+        textDraft = ""
+        resetBarDrag()
         dimCanvas.requestPaint()
         shapeCanvas.requestPaint()
       }
@@ -210,6 +236,23 @@ Scope {
         selY = y
         selW = w
         selH = h
+      }
+
+      function clampBarX(x, w) {
+        return Math.max(8, Math.min(width - w - 8, x))
+      }
+
+      function clampBarY(y, h) {
+        return Math.max(8, Math.min(height - h - 8, y))
+      }
+
+      function resetBarDrag() {
+        toolsMoved = false
+        toolsX = 0
+        toolsY = 0
+        actionsMoved = false
+        actionsX = 0
+        actionsY = 0
       }
 
       function normalizeRect(x1, y1, x2, y2) {
@@ -324,6 +367,11 @@ Scope {
             const px = x1 + t * C, py = y1 + t * D
             if (Math.hypot(lx - px, ly - py) <= thresh)
               return i
+          } else if (s.t === "text") {
+            const tw = Math.max(12, String(s.text || "").length * root.textSize * 0.55)
+            const th = root.textSize + 6
+            if (lx >= s.x - 4 && lx <= s.x + tw + 4 && ly >= s.y - 4 && ly <= s.y + th + 4)
+              return i
           }
         }
         return -1
@@ -364,6 +412,36 @@ Scope {
         shapes = next
         draftPts = []
         shapeCanvas.requestPaint()
+      }
+
+      function cancelText() {
+        textEditing = false
+        textDraft = ""
+      }
+
+      function commitText() {
+        const body = String(textDraft || "").replace(/\s+$/, "")
+        textEditing = false
+        textDraft = ""
+        if (!body.length)
+          return
+        const next = shapes.slice()
+        next.push({ t: "text", x: textX, y: textY, text: body })
+        shapes = next
+        shapeCanvas.requestPaint()
+      }
+
+      function beginText(lx, ly) {
+        if (textEditing)
+          commitText()
+        textX = Math.max(0, Math.min(selW - 8, lx))
+        textY = Math.max(0, Math.min(selH - root.textSize, ly))
+        textDraft = ""
+        textEditing = true
+        Qt.callLater(() => {
+          textField.text = ""
+          textField.forceActiveFocus()
+        })
       }
 
       function paintShapes(ctx, w, h, includeDraft) {
@@ -428,6 +506,14 @@ Scope {
             ctx.fillStyle = root.ink
             ctx.fill()
             ctx.fillStyle = "rgba(0,0,0,0)"
+          } else if (s.t === "text" && s.text) {
+            ctx.save()
+            ctx.fillStyle = root.ink
+            ctx.font = root.textSize + "px \"" + Theme.fontFamily + "\""
+            ctx.textBaseline = "top"
+            ctx.textAlign = "left"
+            ctx.fillText(s.text, s.x, s.y)
+            ctx.restore()
           }
         }
 
@@ -455,31 +541,77 @@ Scope {
       function doSave() {
         if (!hasSel || saving || !freezeReady)
           return
+        if (textEditing)
+          commitText()
         saving = true
         chromeVisible = false
         refreshChrome()
         Qt.callLater(() => {
-          exportBox.grabToImage(result => {
-            const path = root.saveDir + "/" + root.stampName()
-            Quickshell.execDetached(["mkdir", "-p", root.saveDir])
-            if (!result.saveToFile(path)) {
-              saving = false
-              chromeVisible = true
-              refreshChrome()
+          const iw = freezeImg.sourceSize.width
+          const ih = freezeImg.sourceSize.height
+          if (iw < 1 || ih < 1) {
+            saving = false
+            chromeVisible = true
+            refreshChrome()
+            return
+          }
+          const sx = iw / Math.max(1, width)
+          const sy = ih / Math.max(1, height)
+          let nx = Math.max(0, Math.round(selX * sx))
+          let ny = Math.max(0, Math.round(selY * sy))
+          let nw = Math.max(1, Math.round(selW * sx))
+          let nh = Math.max(1, Math.round(selH * sy))
+          if (nx + nw > iw)
+            nw = Math.max(1, iw - nx)
+          if (ny + nh > ih)
+            nh = Math.max(1, ih - ny)
+          const r = Math.max(0, Math.round(cornerR * Math.min(sx, sy)))
+          const dest = root.saveDir + "/" + root.stampName()
+
+          function runCompose(ink) {
+            const args = [
+              root.shotScript, "compose",
+              freezePath, dest,
+              String(nx), String(ny), String(nw), String(nh), String(r)
+            ]
+            if (ink && ink.length)
+              args.push(ink)
+            saveProc.command = args
+            saveProc.running = true
+          }
+
+          if (shapes.length === 0) {
+            runCompose("")
+            return
+          }
+
+          shapeCanvas.grabToImage(result => {
+            const ink = "/tmp/qs-shot-ink-" + root.freezeGen + ".png"
+            if (!result || !result.saveToFile(ink)) {
+              runCompose("")
               return
             }
-            Quickshell.execDetached([
-              "bash", "-c",
-              "wl-copy --type image/png < " + JSON.stringify(path)
-            ])
-            root.cancel()
-          }, Qt.size(Math.round(selW), Math.round(selH)))
+            runCompose(ink)
+          }, Qt.size(nw, nh))
         })
       }
 
       Process {
+        id: saveProc
+        onExited: code => {
+          if (code === 0) {
+            root.cancel()
+            return
+          }
+          saving = false
+          chromeVisible = true
+          refreshChrome()
+        }
+      }
+
+      Process {
         id: freezeProc
-        command: ["grim", "-o", win.modelData.name, win.freezePath]
+        command: ["grim", "-t", "png", "-o", win.modelData.name, win.freezePath]
         onExited: code => {
           if (!root.active)
             return
@@ -487,7 +619,7 @@ Scope {
             root.cancel()
             return
           }
-          win.freezeUrl = "file://" + win.freezePath + "?t=" + Date.now()
+          win.freezeUrl = "file://" + win.freezePath
           win.freezeReady = true
           win.refreshChrome()
         }
@@ -510,7 +642,13 @@ Scope {
         sequence: "Escape"
         enabled: root.active
         context: Qt.WindowShortcut
-        onActivated: root.cancel()
+        onActivated: {
+          if (win.textEditing) {
+            win.cancelText()
+            return
+          }
+          root.cancel()
+        }
       }
 
       Shortcut {
@@ -522,25 +660,15 @@ Scope {
 
       // Frozen desktop
       Image {
+        id: freezeImg
         anchors.fill: parent
         visible: win.freezeReady
         source: win.freezeUrl
-        fillMode: Image.PreserveAspectCrop
+        fillMode: Image.Stretch
         asynchronous: false
         cache: false
-      }
-
-      Rectangle {
-        anchors.fill: parent
-        visible: !win.freezeReady
-        color: "#80000000"
-        Text {
-          anchors.centerIn: parent
-          text: "…"
-          color: Theme.text
-          font.family: Theme.fontFamily
-          font.pixelSize: 28
-        }
+        smooth: false
+        mipmap: false
       }
 
       // Dim with rounded hole (must sit above exportBox so corners stay darkened)
@@ -618,8 +746,11 @@ Scope {
           width: win.width
           height: win.height
           source: win.freezeUrl
+          fillMode: Image.Stretch
           asynchronous: false
           cache: false
+          smooth: false
+          mipmap: false
         }
 
         Canvas {
@@ -714,6 +845,8 @@ Scope {
             return Qt.SizeAllCursor
           if (root.tool === "eraser")
             return Qt.PointingHandCursor
+          if (root.tool === "text")
+            return Qt.IBeamCursor
           return Qt.CrossCursor
         }
 
@@ -724,7 +857,7 @@ Scope {
             return mx >= item.x && mx <= item.x + item.width
                 && my >= item.y && my <= item.y + item.height
           }
-          return hit(toolsBar) || hit(actionBar)
+          return hit(toolsBar) || hit(actionBar) || hit(textField)
         }
 
         onPressed: event => {
@@ -734,6 +867,8 @@ Scope {
           }
           if (overChrome(event.x, event.y))
             return
+          if (win.textEditing)
+            win.commitText()
 
           win.pressX = event.x
           win.pressY = event.y
@@ -769,6 +904,10 @@ Scope {
                 shapeCanvas.requestPaint()
                 return
               }
+              if (root.tool === "text") {
+                win.beginText(event.x - win.selX, event.y - win.selY)
+                return
+              }
               if (root.tool === "rect" || root.tool === "ellipse" || root.tool === "arrow") {
                 win.gesture = "draw"
                 win.drawX1 = event.x - win.selX
@@ -791,6 +930,7 @@ Scope {
               win.selY = event.y
               win.selW = 0
               win.selH = 0
+              win.resetBarDrag()
               win.refreshChrome()
               return
             }
@@ -805,6 +945,7 @@ Scope {
           win.selY = event.y
           win.selW = 0
           win.selH = 0
+          win.resetBarDrag()
           win.refreshChrome()
         }
 
@@ -895,22 +1036,60 @@ Scope {
         }
       }
 
+      TextInput {
+        id: textField
+        visible: win.textEditing && win.chromeVisible
+        z: 40
+        x: win.selX + win.textX
+        y: win.selY + win.textY
+        width: Math.max(48, win.selW - win.textX - 8)
+        color: root.ink
+        font.family: Theme.fontFamily
+        font.pixelSize: root.textSize
+        text: win.textDraft
+        onTextChanged: win.textDraft = text
+        selectedTextColor: Theme.onNotifBadge
+        selectionColor: Theme.sapphire
+        cursorVisible: true
+        clip: true
+
+        Keys.onReturnPressed: event => {
+          win.commitText()
+          event.accepted = true
+        }
+        Keys.onEnterPressed: event => {
+          win.commitText()
+          event.accepted = true
+        }
+        Keys.onEscapePressed: event => {
+          win.cancelText()
+          event.accepted = true
+        }
+      }
+
       // Drawing tools — left of selection; inside when there's no room outside.
-      // Outside exportBox + hidden via chromeVisible on save → never in the PNG.
-      Column {
+      // Drag the group (grip / chrome) to pin it. A new crop resets the pin.
+      Item {
         id: toolsBar
         visible: win.phase === "editing" && win.chromeVisible && win.hasSel
         z: 30
-        spacing: 8
+        width: toolsCol.implicitWidth + 12
+        height: toolsGrip.height + toolsCol.implicitHeight + 10
 
         readonly property int gap: 10
         readonly property int pad: 12
-        readonly property bool placeInside: win.selX < (implicitWidth + gap + 8)
+        readonly property bool placeInside: !win.toolsMoved && win.selX < (width + gap + 8)
 
-        x: placeInside
-           ? win.selX + pad
-           : win.selX - implicitWidth - gap
+        x: {
+          if (win.toolsMoved)
+            return win.clampBarX(win.toolsX, width)
+          if (placeInside)
+            return win.selX + pad
+          return win.selX - width - gap
+        }
         y: {
+          if (win.toolsMoved)
+            return win.clampBarY(win.toolsY, height)
           const top = placeInside ? win.selY + pad : win.selY
           const maxY = placeInside
                        ? win.selY + win.selH - height - pad
@@ -918,48 +1097,130 @@ Scope {
           return Math.max(placeInside ? win.selY + pad : 8, Math.min(top, maxY))
         }
 
-        ToolBtn {
-          glyph: "\uf047"
-          toolId: "select"
+        Rectangle {
+          anchors.fill: parent
+          radius: 14
+          color: Theme.pill
         }
-        ToolBtn {
-          glyph: "\uf1fc"
-          toolId: "brush"
+
+        MouseArea {
+          id: toolsDrag
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.SizeAllCursor
+          preventStealing: true
+
+          property real startBarX: 0
+          property real startBarY: 0
+          property real startParentX: 0
+          property real startParentY: 0
+          property bool dragging: false
+
+          onPressed: event => {
+            const p = mapToItem(toolsBar.parent, event.x, event.y)
+            startParentX = p.x
+            startParentY = p.y
+            startBarX = toolsBar.x
+            startBarY = toolsBar.y
+            dragging = false
+          }
+
+          onPositionChanged: event => {
+            if (!pressed)
+              return
+            const p = mapToItem(toolsBar.parent, event.x, event.y)
+            const dx = p.x - startParentX
+            const dy = p.y - startParentY
+            if (!dragging && (dx * dx + dy * dy) < 16)
+              return
+            dragging = true
+            win.toolsX = win.clampBarX(startBarX + dx, toolsBar.width)
+            win.toolsY = win.clampBarY(startBarY + dy, toolsBar.height)
+            win.toolsMoved = true
+          }
         }
-        ToolBtn {
-          glyph: "\uf0c8"
-          toolId: "rect"
+
+        Item {
+          id: toolsGrip
+          width: parent.width
+          height: 16
+          Row {
+            anchors.centerIn: parent
+            spacing: 3
+            Repeater {
+              model: 3
+              Rectangle {
+                width: 4
+                height: 4
+                radius: 2
+                color: Theme.muted
+                opacity: 0.75
+              }
+            }
+          }
         }
-        ToolBtn {
-          glyph: "\uf111"
-          toolId: "ellipse"
-        }
-        ToolBtn {
-          glyph: "\uf061"
-          toolId: "arrow"
-        }
-        ToolBtn {
-          glyph: "\uf12d"
-          toolId: "eraser"
+
+        Column {
+          id: toolsCol
+          z: 2
+          anchors.horizontalCenter: parent.horizontalCenter
+          anchors.top: toolsGrip.bottom
+          anchors.topMargin: 2
+          spacing: 8
+
+          ToolBtn {
+            glyph: "\uf047"
+            toolId: "select"
+          }
+          ToolBtn {
+            glyph: "\uf1fc"
+            toolId: "brush"
+          }
+          ToolBtn {
+            glyph: "\uf0c8"
+            toolId: "rect"
+          }
+          ToolBtn {
+            glyph: "\uf111"
+            toolId: "ellipse"
+          }
+          ToolBtn {
+            glyph: "\uf061"
+            toolId: "arrow"
+          }
+          ToolBtn {
+            glyph: "\uf031"
+            toolId: "text"
+          }
+          ToolBtn {
+            glyph: "\uf12d"
+            toolId: "eraser"
+          }
         }
       }
 
-      // Save / Cancel — below selection, or inside bottom when fullscreen
-      Row {
+      // Save / Cancel — below selection, or inside bottom when there's no room.
+      Item {
         id: actionBar
         visible: win.phase === "editing" && win.chromeVisible && win.hasSel
         z: 30
-        spacing: 8
+        width: actionGrip.width + actionRow.implicitWidth + 12
+        height: Math.max(actionRow.implicitHeight + 10, 36)
 
         readonly property int gap: 10
         readonly property int pad: 12
-        readonly property bool placeInside: (win.selY + win.selH + gap + height) > (win.height - 8)
+        readonly property bool placeInside: !win.actionsMoved
+            && (win.selY + win.selH + gap + height) > (win.height - 8)
 
         x: {
+          if (win.actionsMoved)
+            return win.clampBarX(win.actionsX, width)
           const prefer = win.selX + (placeInside ? pad : 0)
           return Math.min(win.width - width - 8, Math.max(8, prefer))
         }
         y: {
+          if (win.actionsMoved)
+            return win.clampBarY(win.actionsY, height)
           if (placeInside)
             return Math.max(win.selY + pad, win.selY + win.selH - height - pad)
           const below = win.selY + win.selH + gap
@@ -968,17 +1229,89 @@ Scope {
           return Math.max(8, win.selY - height - gap)
         }
 
-        ActionBtn {
-          label: "Cancel"
-          bg: Theme.surface
-          fg: Theme.text
-          onActivated: root.cancel()
+        Rectangle {
+          anchors.fill: parent
+          radius: 12
+          color: Theme.pill
         }
-        ActionBtn {
-          label: "Save"
-          bg: Theme.sapphire
-          fg: Theme.bg
-          onActivated: win.doSave()
+
+        MouseArea {
+          id: actionsDrag
+          anchors.fill: parent
+          hoverEnabled: true
+          cursorShape: Qt.SizeAllCursor
+          preventStealing: true
+
+          property real startBarX: 0
+          property real startBarY: 0
+          property real startParentX: 0
+          property real startParentY: 0
+          property bool dragging: false
+
+          onPressed: event => {
+            const p = mapToItem(actionBar.parent, event.x, event.y)
+            startParentX = p.x
+            startParentY = p.y
+            startBarX = actionBar.x
+            startBarY = actionBar.y
+            dragging = false
+          }
+
+          onPositionChanged: event => {
+            if (!pressed)
+              return
+            const p = mapToItem(actionBar.parent, event.x, event.y)
+            const dx = p.x - startParentX
+            const dy = p.y - startParentY
+            if (!dragging && (dx * dx + dy * dy) < 16)
+              return
+            dragging = true
+            win.actionsX = win.clampBarX(startBarX + dx, actionBar.width)
+            win.actionsY = win.clampBarY(startBarY + dy, actionBar.height)
+            win.actionsMoved = true
+          }
+        }
+
+        Item {
+          id: actionGrip
+          width: 16
+          height: parent.height
+          Column {
+            anchors.centerIn: parent
+            spacing: 3
+            Repeater {
+              model: 3
+              Rectangle {
+                width: 4
+                height: 4
+                radius: 2
+                color: Theme.muted
+                opacity: 0.75
+              }
+            }
+          }
+        }
+
+        Row {
+          id: actionRow
+          z: 2
+          anchors.verticalCenter: parent.verticalCenter
+          anchors.left: actionGrip.right
+          anchors.leftMargin: 2
+          spacing: 8
+
+          ActionBtn {
+            label: "Cancel"
+            bg: Theme.surface
+            fg: Theme.text
+            onActivated: root.cancel()
+          }
+          ActionBtn {
+            label: "Save"
+            bg: Theme.sapphire
+            fg: Theme.bg
+            onActivated: win.doSave()
+          }
         }
       }
     }
